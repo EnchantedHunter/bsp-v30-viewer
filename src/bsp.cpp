@@ -1,0 +1,398 @@
+/* 
+ * BSP v30 viewer
+ * 
+ *
+ * Autor: Enchanted Hunter
+ */
+ 
+#include "bsp.h"
+#include "container.h"
+#include "utils.h"
+#include "wad.h"
+
+#include <string.h>
+
+void splitModelByMaterial(VECTOR* chunks, uint32_t texId, uint32_t size, uint32_t offset){
+
+    if( (chunks + texId)->size == 0){
+        addVector((chunks + texId), size);
+        addVector((chunks + texId), offset);
+        return;
+    }
+
+    uint32_t lastOffs = *(((uint32_t*)(chunks + texId)->data) + (chunks + texId)->size - 1);
+    uint32_t lastSize = *(((uint32_t*)(chunks + texId)->data) + (chunks + texId)->size - 2);
+    size_t ptr = lastOffs + lastSize;
+
+    if(offset == ptr){
+        *(((uint32_t*)(chunks + texId)->data) + (chunks + texId)->size - 2) += size;
+    }else{
+        addVector((chunks + texId), size);
+        addVector((chunks + texId), offset);
+    }
+}
+
+void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t* verts_count, VECTOR** modelChunks, uint32_t* textures_count, unsigned char** indexes, uint32_t* indexes_count, TEXTURE* texturesRaw, uint32_t texturesCount){
+
+    uint32_t verticesCount;
+    BSPVERTEX* vertices = getVertices(data, &verticesCount);
+    
+    uint32_t marksurfacesCount;
+    BSPMARKSURFACE* marksurfaces = getMarksurfaces(data, &marksurfacesCount);
+
+    uint32_t textureInfoCount;
+    BSPTEXTUREINFO* texturesInfo = getTextureInfo(data, &textureInfoCount);
+
+    uint32_t modelsCount;
+    BSPMODEL* models = getModels(data, &modelsCount);
+
+    uint32_t surfaceEdgesCount;
+    BSPSURFEDGE* surfaceEdges = getSurfaceEdges(data, &surfaceEdgesCount);
+
+    uint32_t facesCount = 0;
+    BSPFACE* faces = getFaces(data, &facesCount);
+
+    uint32_t edgesCount = 0;
+    BSPEDGE* edges = getEdges(data, &edgesCount);
+
+    float* vertexData = (float*)malloc(verticesCount * 6 * sizeof(float));
+
+    uint32_t idx = 0;
+
+    uint32_t lmidx = 0;
+
+    VECTOR* indexesVec = initVector(16, sizeof(int));
+    VECTOR* newIndicesTri = initVector(16, sizeof(int));
+    VECTOR* newVertexesTri = initVector(16, sizeof(float));
+
+    VECTOR* chunks = (VECTOR*)malloc(texturesCount*sizeof(VECTOR)); 
+    for(uint32_t i = 0; i < texturesCount; i++)
+        initVector(chunks+i, 16, sizeof(uint32_t));
+
+    for (uint32_t m = 0; m < modelsCount; m++)
+    for (uint32_t f = 0; f < (models + m)->nFaces; f++){
+    
+        int32_t firstFace = (models + m)->iFirstFace;
+        BSPFACE* face = (faces + f + firstFace);
+        BSPTEXTUREINFO textureInfo = *(texturesInfo + face->iTextureInfo);
+        
+        uint32_t fptr = indexesVec->size;
+
+        for (uint32_t ei = 0; ei < face->nEdges; ei++)
+        {
+            int se = *(surfaceEdges + face->iFirstEdge + ei);
+            BSPEDGE edge = *(edges + abs(se));
+            int index = se >= 0 ? *(edge.iVertex + 0) : *(edge.iVertex + 1);
+            addVector(indexesVec, index);
+        }
+
+        uint32_t p0 = *((int*)indexesVec->data + fptr);
+        uint32_t pp00 = newIndicesTri->size;
+
+        for (int i = 2; i < face->nEdges; i++)
+        {
+            uint32_t w = (texturesRaw + textureInfo.iMiptex)->iWidth;
+            uint32_t h = (texturesRaw + textureInfo.iMiptex)->iHeight;
+
+            addVector(newIndicesTri, idx++);
+            addVector(newIndicesTri, idx++);
+            addVector(newIndicesTri, idx++);
+
+            float x = (vertices + p0)->x;
+            float y = (vertices + p0)->y;
+            float z = (vertices + p0)->z;
+
+            float u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift)/w;
+            float v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift)/h;
+
+            addVector(newVertexesTri, (float)(x * 0.01f));
+            addVector(newVertexesTri, (float)(y * 0.01f));
+            addVector(newVertexesTri, (float)(z * 0.01f));
+            addVector(newVertexesTri, (float)(u * 1.0f));
+            addVector(newVertexesTri, (float)(v * 1.0f));
+
+
+            x = (vertices + *(((uint32_t*)indexesVec->data) + fptr + i - 1))->x;
+            y = (vertices + *(((uint32_t*)indexesVec->data) + fptr + i - 1))->y;
+            z = (vertices + *(((uint32_t*)indexesVec->data) + fptr + i - 1))->z;
+
+            u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift)/w;
+            v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift)/h;
+
+            addVector(newVertexesTri, x * 0.01f);
+            addVector(newVertexesTri, y * 0.01f);
+            addVector(newVertexesTri, z * 0.01f);
+            addVector(newVertexesTri, u * 1.0f);
+            addVector(newVertexesTri, v * 1.0f);
+
+
+            x = (vertices + *((uint32_t*)indexesVec->data + fptr + i))->x;
+            y = (vertices + *((uint32_t*)indexesVec->data + fptr + i))->y;
+            z = (vertices + *((uint32_t*)indexesVec->data + fptr + i))->z;
+
+            u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift)/w;
+            v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift)/h;
+
+            addVector(newVertexesTri, x * 0.01f);
+            addVector(newVertexesTri, y * 0.01f);
+            addVector(newVertexesTri, z * 0.01f);
+            addVector(newVertexesTri, u * 1.0f);
+            addVector(newVertexesTri, v * 1.0f);
+        
+        }
+        splitModelByMaterial(chunks, textureInfo.iMiptex, newIndicesTri->size - pp00, pp00);
+
+    }
+
+    *vertexes = newVertexesTri->data;
+    *verts_count = newVertexesTri->size;
+
+    *modelChunks = chunks;
+    *textures_count = texturesCount;
+
+    *indexes_count = newIndicesTri->size;
+    *indexes = newIndicesTri->data;
+
+}
+
+unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, char * texName, unsigned char * image, uint32_t w, uint32_t h){
+
+    LINKEDLIST* wadsData = wadsDataFirst;
+    
+    while(wadsData->size != 0){
+
+        unsigned char* wadFile = wadsData->data;
+        wadsData = wadsData->next;
+
+        WADHEADER* header = (WADHEADER*)wadFile;
+        WADDIRENTRY* direntries = (WADDIRENTRY*)(wadFile + header->nDirOffset);
+
+        char name[MAXTEXTURENAME+1];
+
+        for(size_t i = 0 ; i < header->nDir ; i++){
+            WADDIRENTRY * dir = direntries + i;
+
+            BSPMIPTEXWAD* tex = (BSPMIPTEXWAD*)(wadFile + dir->nFilePos);
+            memcpy(name, tex->szName, MAXTEXTURENAME);
+            name[MAXTEXTURENAME]='\0';
+
+            if (strcmp (texName, name) == 0 && tex->nWidth == w && tex->nHeight == h){
+#ifdef DEBUG_LEVEL_2
+                printf("found texture in wad file : %s\n", name);
+#endif
+                unsigned char indices[tex->nWidth * tex->nHeight];
+                memcpy(indices, wadFile + dir->nFilePos + *(tex->nOffsets + 0), tex->nWidth * tex->nHeight);
+
+                unsigned char palette[256*3];
+                memcpy(palette, wadFile + dir->nFilePos + *(tex->nOffsets + 3) + ((tex->nWidth/8) * (tex->nHeight/8)) + 2, 256*3);
+
+                for(int i = 0 ; i < tex->nWidth * tex->nHeight ; i++){
+                    unsigned char* paletteIdx = palette + ((unsigned char)(indices[i])*3);
+                    memcpy(image + i*4, paletteIdx, 3);
+                                
+                    *(image + i*4+3) = 0xff;
+
+                    if(indices[i] == 255)
+                    if( *((unsigned char*)(image + i*4 + 0)) == 0x0 &&
+                        *((unsigned char*)(image + i*4 + 1)) == 0x0  &&
+                        *((unsigned char*)(image + i*4 + 2)) == 0xff)
+                    {
+                        *(image + i*4+2) = 0x00;
+                        *(image + i*4+3) = 0x00;
+                    }
+                }
+            }
+        }
+    }
+    
+    return NULL;
+}
+
+TEXTURE* loadLightMap(unsigned char* data, uint32_t* count){
+    BSPHEADER* header = (BSPHEADER*)data;
+    uint32_t size = (header->lump + LUMP_LIGHTING)->nLength;
+    printf("%u\n", size);
+    unsigned char * lighting = (unsigned char*)data + (header->lump + LUMP_LIGHTING)->nOffset;
+    return NULL;
+}
+
+TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
+    
+    BSPHEADER* header = (BSPHEADER*)data;
+
+    char wadWord[] = ".wad";
+    char * entities1 = (char*)data + (header->lump + LUMP_ENTITIES)->nOffset;
+
+    char * entities = (char*)data + (header->lump + LUMP_ENTITIES)->nOffset;
+    char* end = NULL;
+    uint32_t stop = 0;
+
+    VECTOR* wadNamesOffsets = initVector(16, sizeof(size_t));
+    LINKEDLIST* wadsData = (LINKEDLIST*)malloc(sizeof(LINKEDLIST));
+    LINKEDLIST* wadFirst = wadsData;
+
+    while((end = strstr(entities, wadWord)) != NULL){
+                
+        for(size_t ii = 0 ; ii < 100; ii++){
+            if(*(end - ii) == '\\' || *(end - ii) == ' ' || *(end - ii) == ';' || *(end - ii) == '"'){
+                
+                size_t offset = (size_t)( end - entities - ii + 1);
+                size_t size = (size_t)( ii +  sizeof(wadWord) - 2);
+                
+                char wadName[size + 1];
+                memcpy(wadName, entities + offset, size);
+                wadName[size] = '\0';
+
+                size_t wadSize;
+                unsigned char* wad = readFile(wadName, &wadSize);
+                if(wad != NULL){
+                    wadsData->data = wad;
+                    wadsData->size = wadSize;
+                    wadsData->next = (LINKEDLIST*)malloc(sizeof(LINKEDLIST));
+                    wadsData->next->size = 0;
+                    wadsData = wadsData->next;
+#ifdef DEBUG_LEVEL_2
+                    printf("file %s exists\n", wadName);
+#endif
+                }else{
+#ifdef DEBUG_LEVEL_2
+                    printf("error: file %s not found\n", wadName);
+#endif
+                }
+                
+                break;
+            }
+        }
+
+        entities = end + sizeof(wadWord);
+    }
+
+    entities = (char*)data + (header->lump + LUMP_ENTITIES)->nOffset;
+
+    size_t lumpTextureOffset = (header->lump + LUMP_TEXTURES)->nOffset;
+    
+    BSPTEXTUREHEADER* textureHeader = (BSPTEXTUREHEADER*)(data + lumpTextureOffset);
+    BSPMIPTEXOFFSET* texturesOffsets = (BSPMIPTEXOFFSET*)(data + lumpTextureOffset + sizeof(BSPTEXTUREHEADER));
+
+    TEXTURE* textureArray = (TEXTURE*)malloc(textureHeader->nMipTextures*sizeof(TEXTURE));
+    *count = textureHeader->nMipTextures;
+    
+    for(int i = 0; i < textureHeader->nMipTextures ; i++ ){
+
+        BSPMIPTEX* bspTex = (BSPMIPTEX*)(data + lumpTextureOffset + *(texturesOffsets + i));
+
+        if(bspTex->nWidth > 1024 || bspTex->nHeight > 1024){
+
+            //if bad texture size 
+            TEXTURE* texture = (TEXTURE*)malloc(sizeof(TEXTURE));
+            texture->iWidth = 1024;
+            texture->iHeight = 1024;
+            texture->data = (unsigned char*)malloc(1024 * 1024 * 4);
+            *(textureArray + i) = *texture;
+#ifdef DEBUG_LEVEL_2
+            printf("Error: texture [%s] wrong size %d %d\n", bspTex->szName , bspTex->nWidth, bspTex->nHeight);
+#endif
+            continue;
+        }
+        
+        char* indices = (char *)malloc(bspTex->nWidth * bspTex->nHeight);
+        memcpy(indices, data + lumpTextureOffset + *(texturesOffsets + i) + *(bspTex->nOffsets + 0), bspTex->nWidth * bspTex->nHeight);
+
+        char palette[256*3];
+        memcpy(palette, data + lumpTextureOffset + *(texturesOffsets + i) + *(bspTex->nOffsets + 3) + ((bspTex->nWidth/8) * (bspTex->nHeight/8)) + 2, 256*3);
+
+        char* image = (char *)malloc(bspTex->nWidth * bspTex->nHeight * 4);
+
+        if(bspTex->nOffsets[0] == 0 && 
+            bspTex->nOffsets[1] == 0 && 
+            bspTex->nOffsets[2] == 0 && 
+            bspTex->nOffsets[3] == 0){
+
+            char texName[MAXTEXTURENAME + 1];
+            memcpy(texName, bspTex->szName, MAXTEXTURENAME);
+            texName[MAXTEXTURENAME] = '\0';
+
+            if (strcmp (texName, "aaatrigger") != 0)
+                textureInWadFind(wadFirst, texName, (unsigned char*)image, bspTex->nWidth, bspTex->nHeight);
+            else
+                memset(image, 0x00, bspTex->nWidth * bspTex->nHeight * 4);
+            
+        }else{
+            
+            char texName[MAXTEXTURENAME + 1];
+            memcpy(texName, bspTex->szName, MAXTEXTURENAME);
+            texName[MAXTEXTURENAME] = '\0';
+
+            for(int i = 0 ; i < bspTex->nWidth * bspTex->nHeight ; i++){
+                char* paletteIdx = palette + ((unsigned char)(indices[i])*3);
+                memcpy(image + i*4, paletteIdx, 3);
+                            
+                *(image + i*4+3) = 0xff;
+
+                if (strcmp (texName, "aaatrigger") == 0){
+                    *(image + i*4+3) = 0x00;
+                }
+
+                if(((unsigned char)(indices[i])) == 255)
+                if( *((unsigned char*)(image + i*4 + 0)) == 0x0 &&
+                    *((unsigned char*)(image + i*4 + 1)) == 0x0  &&
+                    *((unsigned char*)(image + i*4 + 2)) == 0xff)
+                {
+                    *(image + i*4+2) = 0x00;
+                    *(image + i*4+3) = 0x00;
+                }
+            }
+        }
+        
+        TEXTURE* texture = (TEXTURE*)malloc(sizeof(TEXTURE));
+        texture->iWidth = bspTex->nWidth;
+        texture->iHeight = bspTex->nHeight;
+        texture->data = (unsigned char*)image;
+
+        *(textureArray + i) = *texture;
+    }
+
+    return textureArray;
+}
+
+BSPTEXTUREINFO* getTextureInfo(unsigned char* data, uint32_t* count){
+    BSPHEADER* header = (BSPHEADER*)data;
+    *count = (header->lump + LUMP_TEXINFO)->nLength / sizeof(BSPVERTEX);
+    return (BSPTEXTUREINFO*)(data + (header->lump + LUMP_TEXINFO)->nOffset);
+}
+
+BSPVERTEX* getVertices(unsigned char* data, uint32_t* count){
+    BSPHEADER* header = (BSPHEADER*)data;
+    *count = (header->lump + LUMP_VERTICES)->nLength / sizeof(BSPVERTEX);
+    return (BSPVERTEX*)(data + (header->lump + LUMP_VERTICES)->nOffset);
+}
+
+BSPMARKSURFACE* getMarksurfaces(unsigned char* data, uint32_t* count){
+    BSPHEADER* header = (BSPHEADER*)data;
+    *count = (header->lump + LUMP_MARKSURFACES)->nLength / sizeof(BSPMARKSURFACE);
+    return (BSPMARKSURFACE*)(data + (header->lump + LUMP_MARKSURFACES)->nOffset);
+}
+
+BSPFACE* getFaces(unsigned char* data, uint32_t* count){
+    BSPHEADER* header = (BSPHEADER*)data;
+    *count = (header->lump + LUMP_FACES)->nLength / sizeof(BSPFACE);
+    return (BSPFACE*)(data + (header->lump + LUMP_FACES)->nOffset);
+}
+
+BSPSURFEDGE* getSurfaceEdges(unsigned char* data, uint32_t* count){
+    BSPHEADER* header = (BSPHEADER*)data;
+    *count = (header->lump + LUMP_SURFEDGES)->nLength / sizeof(BSPSURFEDGE);
+    return (BSPSURFEDGE*)(data + (header->lump + LUMP_SURFEDGES)->nOffset);
+}
+
+BSPEDGE* getEdges(unsigned char* data, uint32_t* count){
+    BSPHEADER* header = (BSPHEADER*)data;
+    *count = (header->lump + LUMP_EDGES)->nLength / sizeof(BSPEDGE);
+    return (BSPEDGE*)(data + (header->lump + LUMP_EDGES)->nOffset);
+}
+
+BSPMODEL* getModels(unsigned char* data, uint32_t* count){
+    BSPHEADER* header = (BSPHEADER*)data;
+    *count = (header->lump + LUMP_MODELS)->nLength / sizeof(BSPMODEL);
+    return (BSPMODEL*)(data + (header->lump + LUMP_MODELS)->nOffset);
+}

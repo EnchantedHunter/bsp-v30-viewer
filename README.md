@@ -22,6 +22,10 @@ A. Для платформ linux и osx понадобится установл�
 
 `cd bsp-v30-viewer`
 
+`git submodule init`
+
+`git submodule update`
+
 `mkdir build`
 
 `cd build`

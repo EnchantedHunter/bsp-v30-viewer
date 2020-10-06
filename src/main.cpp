@@ -87,7 +87,7 @@ int main(int argv, char** argc) {
     // shader source code
     std::string vertex_source =
         "#version 330\n"
-        "uniform mat4 ViewProjection;\n" // the projection matrix uniform
+        "uniform mat4 ViewProjection;\n"
         "layout(location = 0) in vec4 vposition;\n"
         "layout(location = 1) in vec2 vertexUV;\n"
         "out vec4 fcolor;\n"
@@ -107,7 +107,7 @@ int main(int argv, char** argc) {
         "vec4 texColor = texture(textureSampler, UV);"
         "if(texColor.a < 0.1)"
         "    discard;"
-        "FragColor = texColor;//texture(textureSampler, UV);//vec4(1.0, 1.0, 0.4, 1.0);//fcolor;\n"
+        "FragColor = texColor;\n"
         "}\n";
    
    
@@ -223,10 +223,8 @@ int main(int argv, char** argc) {
     unsigned char* ind;
     VECTOR* materials;
 
-    // printf("1\n");
     loadVertexesIndexes(bspFile, &ves, &verts_count, &materials, &textures_count, &ind, &ind_count, texturesRaw, texturesCount);
-    // printf("2\n");
-
+    
     // fill with data
     glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat)* verts_count, (GLfloat*)ves, GL_STATIC_DRAW);
                     

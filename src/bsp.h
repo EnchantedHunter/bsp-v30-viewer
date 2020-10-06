@@ -173,15 +173,14 @@ typedef struct _VBOCHUNK
 
 // =========== FUNCS ============
 
-BSPVERTEX* getVertices(unsigned char* data, uint32_t* count);
 BSPMARKSURFACE* getMarksurfaces(unsigned char* data, uint32_t* count);
-BSPFACE* getFaces(unsigned char* data, uint32_t* count);
-BSPSURFEDGE* getSurfaceEdges(unsigned char* data, uint32_t* count);
-BSPEDGE* getEdges(unsigned char* data, uint32_t* count);
-BSPMODEL* getModels(unsigned char* data, uint32_t* count);
 BSPTEXTUREINFO* getTextureInfo(unsigned char* data, uint32_t* count);
+BSPSURFEDGE* getSurfaceEdges(unsigned char* data, uint32_t* count);
+BSPVERTEX* getVertices(unsigned char* data, uint32_t* count);
+BSPMODEL* getModels(unsigned char* data, uint32_t* count);
+BSPFACE* getFaces(unsigned char* data, uint32_t* count);
+BSPEDGE* getEdges(unsigned char* data, uint32_t* count);
 
-TEXTURE* loadLightMap(unsigned char* data, uint32_t* count);
 TEXTURE* loadTextures(unsigned char* data, uint32_t* count);
 void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t* verts_count, VECTOR** models, uint32_t* textures_count, unsigned char** indexes, uint32_t* indexes_count, TEXTURE* texturesRaw, uint32_t texturesCount);
 

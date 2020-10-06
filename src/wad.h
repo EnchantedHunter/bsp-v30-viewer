@@ -42,8 +42,5 @@ typedef struct _BSPMIPTEXWAD
     uint32_t nWidth, nHeight;     // Extends of the texture
     uint32_t nOffsets[MIPLEVELS]; // Offsets to texture mipmaps BSPMIPTEX;
 } BSPMIPTEXWAD;
- 
-
-// void parseWadFile(unsigned char* data);
 
 #endif

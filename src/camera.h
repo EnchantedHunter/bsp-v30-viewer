@@ -33,7 +33,5 @@ private:
 public:
 
     glm::vec3 update(float dt, GLFWwindow *window);
-
     glm::mat4 viewProjection(float width, float height);
-
 };

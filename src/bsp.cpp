@@ -208,14 +208,6 @@ unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, char * texName, unsi
     return NULL;
 }
 
-TEXTURE* loadLightMap(unsigned char* data, uint32_t* count){
-    BSPHEADER* header = (BSPHEADER*)data;
-    uint32_t size = (header->lump + LUMP_LIGHTING)->nLength;
-    printf("%u\n", size);
-    unsigned char * lighting = (unsigned char*)data + (header->lump + LUMP_LIGHTING)->nOffset;
-    return NULL;
-}
-
 TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
     
     BSPHEADER* header = (BSPHEADER*)data;

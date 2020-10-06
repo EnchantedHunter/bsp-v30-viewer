@@ -1,7 +1,7 @@
 # bsp-v30-viewer
 Просмоторщик BSP карт 30 версии. Данный проект используется в учебных целях.
 
-![Alt text](/imgs/anim.gif?raw=true "Bsp v30 Viewer")
+![Alt text](/img/anim.gif?raw=true "Bsp v30 Viewer")
 
 ---
 

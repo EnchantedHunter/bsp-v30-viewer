@@ -8,7 +8,7 @@
 #ifndef CONTAINER_H
 #define CONTAINER_H
 
-#include <iostream>
+#include "texture.h"
 
 typedef struct _VECTOR{
     uint32_t size;
@@ -25,10 +25,14 @@ typedef struct _LINKEDLIST{
 
 VECTOR* initVector(uint32_t capacity, uint32_t elementSize);
 void initVector(VECTOR* vec, uint32_t capacity, uint32_t elementSize);
-void addVector(VECTOR* vec, int val);
-void addVector(VECTOR* vec, float val);
 void addVector(VECTOR* vec, uint32_t val);
+void addVector(VECTOR* vec, struct _TEXTURE val);
+void addVector(VECTOR* vec, struct _CHUNK val);
 void addVector(VECTOR* vec, size_t val);
+void addVector(VECTOR* vec, VECTOR val);
+void addVector(VECTOR* vec, float val);
+void addVector(VECTOR* vec, int val);
+
 void destroyVector(VECTOR* vec);
 
 #endif

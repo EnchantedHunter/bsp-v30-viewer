@@ -64,6 +64,41 @@ void addVector(VECTOR* vec, size_t val){
     vec->size++;
 }
 
+void addVector(VECTOR* vec, TEXTURE val){
+
+    if( vec->size + 1 >= vec->capacity ){
+        vec->capacity += 3 * vec->capacity/ 2;
+        vec->data = (unsigned char*)realloc(vec->data, vec->capacity * vec->elementSize);
+    }
+
+    *( ((TEXTURE*)vec->data) + vec->size) = val;
+    
+    vec->size++;
+}
+
+void addVector(VECTOR* vec, CHUNK val){
+
+    if( vec->size + 1 >= vec->capacity ){
+        vec->capacity += 3 * vec->capacity/ 2;
+        vec->data = (unsigned char*)realloc(vec->data, vec->capacity * vec->elementSize);
+    }
+
+    *( ((CHUNK*)vec->data) + vec->size) = val;
+
+    vec->size++;
+}
+
+void addVector(VECTOR* vec, VECTOR val){
+
+    if( vec->size + 1 >= vec->capacity ){
+        vec->capacity += 3 * vec->capacity/ 2;
+        vec->data = (unsigned char*)realloc(vec->data, vec->capacity * vec->elementSize);
+    }
+    *( ((VECTOR*)vec->data) + vec->size) = val;
+
+    vec->size++;
+}
+
 void destroyVector(VECTOR* vec){
     free(vec->data);
     free(vec);

@@ -10,11 +10,15 @@
 #include "utils.h"
 #include "wad.h"
 
+#include <math.h> 
 #include <string.h>
 
-void splitModelByMaterial(VECTOR* chunks, uint32_t texId, uint32_t size, uint32_t offset){
+void splitModelByMaterial(VECTOR* chunks, uint32_t texId, uint32_t size, uint32_t offset, VECTOR* light_maps, CHUNK* curr_chunk){
+    
+    addVector(((VECTOR*)light_maps->data) + texId, *curr_chunk);
 
     if( (chunks + texId)->size == 0){
+
         addVector((chunks + texId), size);
         addVector((chunks + texId), offset);
         return;
@@ -25,20 +29,99 @@ void splitModelByMaterial(VECTOR* chunks, uint32_t texId, uint32_t size, uint32_
     size_t ptr = lastOffs + lastSize;
 
     if(offset == ptr){
+
         *(((uint32_t*)(chunks + texId)->data) + (chunks + texId)->size - 2) += size;
     }else{
+
         addVector((chunks + texId), size);
         addVector((chunks + texId), offset);
     }
 }
 
-void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t* verts_count, VECTOR** modelChunks, uint32_t* textures_count, unsigned char** indexes, uint32_t* indexes_count, TEXTURE* texturesRaw, uint32_t texturesCount){
+TEXTURE* makeLightMapsAtlas(VECTOR* lms, VECTOR* vertexes){
+
+    uint32_t m_width = 0;
+    uint32_t m_height = 0;
+
+    for(uint32_t i = 0; i < lms->size ; i++){
+
+        CHUNK* clm = ((CHUNK*)lms->data) + i;
+        TEXTURE* lm = clm->tex;
+
+        if( lm->iWidth > m_width )
+            m_width = lm->iWidth;
+
+        if( lm->iHeight > m_height )
+            m_height = lm->iHeight;
+    }
+
+    uint32_t lx = 0;
+    uint32_t ly = 0;
+
+    for(uint32_t i = 0 ; i < lms->size ; i ++){
+        
+        lx++;
+        if(lx * ly >= lms->size)
+            break;
+        
+        ly++;
+        if(lx * ly >= lms->size)
+            break;
+    }
+
+    TEXTURE* atl = (TEXTURE*)malloc( sizeof(TEXTURE));
+    
+    unsigned char* atlas = (unsigned char*)malloc( lx * m_width * ly * m_height * 3 * sizeof(unsigned char));
+    memset(atlas, 0x0f, lx * m_width * ly * m_height * 3 * sizeof(unsigned char));
+
+    atl->data = atlas;
+    atl->iWidth = lx * m_width;
+    atl->iHeight = ly * m_height;
+    
+    if(lms->size == 0){
+        atl->data = (unsigned char*)malloc(3);
+        atl->iWidth = 1;
+        atl->iHeight = 1;
+        memset(atl->data, 0x00, 3 * sizeof(unsigned char));
+        return atl;
+    }
+
+    for(uint32_t i = 0; i < lms->size ; i++){
+
+        CHUNK* clm = ((CHUNK*)lms->data) + i;
+        TEXTURE* lm = clm->tex;
+
+        uint32_t px = ( i + lx ) % lx ;
+        uint32_t py = i / lx + 1;
+        
+        for(uint32_t ii = 0 ; ii < clm->uv_size ; ii++){
+            
+            float u = *( ((float*)vertexes->data) + *(((uint32_t*)clm->u) + ii) );
+            float v = *( ((float*)vertexes->data) + *(((uint32_t*)clm->v) + ii) );
+
+            float xu = ((int)(u * ((float)lm->iWidth) + ((float)(px)) * m_width  )) / ((float)atl->iWidth);
+            float xv = ((int)(v * ((float)lm->iHeight) + ((float)(py - 1)) * m_height )) / ((float)atl->iHeight) ;
+
+            *( ((float*)vertexes->data) + *(((uint32_t*)clm->u) + ii) ) = xu;
+            *( ((float*)vertexes->data) + *(((uint32_t*)clm->v) + ii) ) = xv;
+        }
+
+        for(uint32_t x = 0; x < lm->iHeight ; x++){
+
+            uint32_t sft = (py - 1 )* lx * m_width * 3 * m_height + (px) * m_width * 3 + lx * m_width * 3 * x;
+            uint32_t lm_sft = (x) * lm->iWidth * 3;
+
+            memcpy(atlas + sft, lm->data + lm_sft, lm->iWidth * 3);
+        }
+    }
+
+    return atl;
+}
+
+void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t* verts_count, VECTOR** modelChunks, uint32_t* textures_count, unsigned char** indexes, uint32_t* indexes_count, TEXTURE* texturesRaw, uint32_t texturesCount, TEXTURE** lightMapAtl, uint32_t* lightMapAtlCount){
 
     uint32_t verticesCount;
     BSPVERTEX* vertices = getVertices(data, &verticesCount);
-    
-    uint32_t marksurfacesCount;
-    BSPMARKSURFACE* marksurfaces = getMarksurfaces(data, &marksurfacesCount);
 
     uint32_t textureInfoCount;
     BSPTEXTUREINFO* texturesInfo = getTextureInfo(data, &textureInfoCount);
@@ -55,11 +138,13 @@ void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t
     uint32_t edgesCount = 0;
     BSPEDGE* edges = getEdges(data, &edgesCount);
 
-    float* vertexData = (float*)malloc(verticesCount * 6 * sizeof(float));
-
     uint32_t idx = 0;
 
-    uint32_t lmidx = 0;
+    VECTOR* light_maps = initVector(texturesCount, sizeof(VECTOR));       //need array
+    for(uint32_t i = 0; i < texturesCount; i++)                           //==========
+        initVector( ((VECTOR*)light_maps->data) + i, 16, sizeof(CHUNK));  //==========
+
+    VECTOR* light_atlases = initVector(16, sizeof(TEXTURE));
 
     VECTOR* indexesVec = initVector(16, sizeof(int));
     VECTOR* newIndicesTri = initVector(16, sizeof(int));
@@ -69,8 +154,11 @@ void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t
     for(uint32_t i = 0; i < texturesCount; i++)
         initVector(chunks+i, 16, sizeof(uint32_t));
 
+    BSPHEADER* header = (BSPHEADER*)data;
+    unsigned char* light  = (unsigned char*)(data + (header->lump + LUMP_LIGHTING)->nOffset);
+
     for (uint32_t m = 0; m < modelsCount; m++)
-    for (uint32_t f = 0; f < (models + m)->nFaces; f++){
+    for (int32_t f = 0; f < (models + m)->nFaces; f++){
     
         int32_t firstFace = (models + m)->iFirstFace;
         BSPFACE* face = (faces + f + firstFace);
@@ -78,16 +166,82 @@ void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t
         
         uint32_t fptr = indexesVec->size;
 
+        float minU = 999999.0f;
+        float minV = 999999.0f;
+        float maxU = -999999.0f;
+        float maxV = -999999.0f;
+
         for (uint32_t ei = 0; ei < face->nEdges; ei++)
         {
             int se = *(surfaceEdges + face->iFirstEdge + ei);
             BSPEDGE edge = *(edges + abs(se));
             int index = se >= 0 ? *(edge.iVertex + 0) : *(edge.iVertex + 1);
             addVector(indexesVec, index);
+
+            float x = (vertices + index)->x;
+            float y = (vertices + index)->y;
+            float z = (vertices + index)->z;
+
+            float u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift);
+            float v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift);
+
+    		if (u < minU)
+				minU = u;
+			if (u > maxU)
+				maxU = u;
+
+            if (v < minV)
+				minV = v;
+			if (v > maxV)
+				maxV = v;
         }
 
         uint32_t p0 = *((int*)indexesVec->data + fptr);
         uint32_t pp00 = newIndicesTri->size;
+
+        float texMinU = (float)floor(minU / 16.0);
+        float texMinV = (float)floor(minV / 16.0);
+        float texMaxU = (float)ceil(maxU / 16.0);
+        float texMaxV = (float)ceil(maxV / 16.0);
+
+        uint32_t width = floor((texMaxU - texMinU) + 1);
+        uint32_t height = floor((texMaxV - texMinV) + 1);
+
+        float midPolyU = (minU + maxU) / 2.0;
+        float midPolyV = (minV + maxV) / 2.0;
+        float midTexU = width / 2.0;
+        float midTexV = height / 2.0;
+
+        CHUNK* chunk = (CHUNK*)malloc(sizeof(CHUNK));
+        chunk->u = (uint32_t*)malloc(350*sizeof(uint32_t)); // need vector 
+        chunk->v = (uint32_t*)malloc(350*sizeof(uint32_t)); // ===========
+        chunk->uv_size = 0;
+
+        if(face->nLightmapOffset <= (header->lump + LUMP_LIGHTING)->nLength){
+            
+            unsigned char* currLight = light + face->nLightmapOffset;
+            unsigned char* lightMap = (unsigned char*) malloc(width*height*3*sizeof(unsigned char));
+            memcpy(lightMap, currLight, width*height*3*sizeof(unsigned char));
+
+            TEXTURE* tex = (TEXTURE*)malloc(sizeof(TEXTURE));
+
+            tex->data = lightMap;
+            tex->iWidth = width;
+            tex->iHeight = height;
+            chunk->tex = tex;
+
+        }
+        else{
+            unsigned char* dummy = (unsigned char*) malloc(width*height*3*sizeof(unsigned char));
+            memset(dummy, 0x0f, width*height*3*sizeof(unsigned char));
+
+            TEXTURE* tex = (TEXTURE*)malloc(sizeof(TEXTURE));
+
+            tex->data = dummy;
+            tex->iWidth = width;
+            tex->iHeight = height;
+            chunk->tex = tex;
+        }
 
         for (int i = 2; i < face->nEdges; i++)
         {
@@ -102,47 +256,87 @@ void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t
             float y = (vertices + p0)->y;
             float z = (vertices + p0)->z;
 
-            float u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift)/w;
-            float v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift)/h;
+            float u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift);
+            float v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift);
 
-            addVector(newVertexesTri, (float)(x * 0.01f));
-            addVector(newVertexesTri, (float)(y * 0.01f));
-            addVector(newVertexesTri, (float)(z * 0.01f));
-            addVector(newVertexesTri, (float)(u * 1.0f));
-            addVector(newVertexesTri, (float)(v * 1.0f));
+            float lightMapU = midTexU + (u - midPolyU) / 16.0;
+			float lightMapV = midTexV + (v - midPolyV) / 16.0;
 
+            addVector(newVertexesTri, x * 0.01f );
+            addVector(newVertexesTri, y * 0.01f );
+            addVector(newVertexesTri, z * 0.01f );
+            addVector(newVertexesTri, u/w);
+            addVector(newVertexesTri, v/h);
+            addVector(newVertexesTri, lightMapU/width);
+            addVector(newVertexesTri, lightMapV/height);
 
-            x = (vertices + *(((uint32_t*)indexesVec->data) + fptr + i - 1))->x;
-            y = (vertices + *(((uint32_t*)indexesVec->data) + fptr + i - 1))->y;
-            z = (vertices + *(((uint32_t*)indexesVec->data) + fptr + i - 1))->z;
+            *( ((uint32_t*)chunk->u) + chunk->uv_size  ) = newVertexesTri->size - 2;
+            *( ((uint32_t*)chunk->v) + chunk->uv_size  ) = newVertexesTri->size - 1;
 
-            u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift)/w;
-            v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift)/h;
+            chunk->uv_size++;
 
-            addVector(newVertexesTri, x * 0.01f);
-            addVector(newVertexesTri, y * 0.01f);
-            addVector(newVertexesTri, z * 0.01f);
-            addVector(newVertexesTri, u * 1.0f);
-            addVector(newVertexesTri, v * 1.0f);
+            x = (vertices + *(((int*)indexesVec->data) + fptr + i - 1))->x;
+            y = (vertices + *(((int*)indexesVec->data) + fptr + i - 1))->y;
+            z = (vertices + *(((int*)indexesVec->data) + fptr + i - 1))->z;
 
+            u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift);
+            v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift);
 
-            x = (vertices + *((uint32_t*)indexesVec->data + fptr + i))->x;
-            y = (vertices + *((uint32_t*)indexesVec->data + fptr + i))->y;
-            z = (vertices + *((uint32_t*)indexesVec->data + fptr + i))->z;
+            lightMapU = midTexU + (u - midPolyU) / 16.0;
+			lightMapV = midTexV + (v - midPolyV) / 16.0;
 
-            u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift)/w;
-            v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift)/h;
+            addVector(newVertexesTri, x * 0.01f );
+            addVector(newVertexesTri, y * 0.01f );
+            addVector(newVertexesTri, z * 0.01f );
+            addVector(newVertexesTri, u/w);
+            addVector(newVertexesTri, v/h);
+            addVector(newVertexesTri, lightMapU/width);
+            addVector(newVertexesTri, lightMapV/height);
 
-            addVector(newVertexesTri, x * 0.01f);
-            addVector(newVertexesTri, y * 0.01f);
-            addVector(newVertexesTri, z * 0.01f);
-            addVector(newVertexesTri, u * 1.0f);
-            addVector(newVertexesTri, v * 1.0f);
-        
+            *( ((uint32_t*)chunk->u) + chunk->uv_size ) = newVertexesTri->size - 2;
+            *( ((uint32_t*)chunk->v) + chunk->uv_size ) = newVertexesTri->size - 1;
+
+            chunk->uv_size++;
+
+            x = (vertices + *((int*)indexesVec->data + fptr + i))->x;
+            y = (vertices + *((int*)indexesVec->data + fptr + i))->y;
+            z = (vertices + *((int*)indexesVec->data + fptr + i))->z;
+
+            u = (textureInfo.vS.x * x + textureInfo.vS.y * y + textureInfo.vS.z * z + textureInfo.fSShift);
+            v = (textureInfo.vT.x * x + textureInfo.vT.y * y + textureInfo.vT.z * z + textureInfo.fTShift);
+
+            lightMapU = midTexU + (u - midPolyU) / 16.0;
+			lightMapV = midTexV + (v - midPolyV) / 16.0;
+
+            addVector(newVertexesTri, x * 0.01f );
+            addVector(newVertexesTri, y * 0.01f );
+            addVector(newVertexesTri, z * 0.01f );
+            addVector(newVertexesTri, u/w);
+            addVector(newVertexesTri, v/h);
+            addVector(newVertexesTri, lightMapU/width);
+            addVector(newVertexesTri, lightMapV/height);
+
+            *( ((uint32_t*)chunk->u) + chunk->uv_size ) = newVertexesTri->size - 2;
+            *( ((uint32_t*)chunk->v) + chunk->uv_size ) = newVertexesTri->size - 1;
+            
+            chunk->uv_size++;
         }
-        splitModelByMaterial(chunks, textureInfo.iMiptex, newIndicesTri->size - pp00, pp00);
 
+        splitModelByMaterial(chunks, textureInfo.iMiptex, newIndicesTri->size - pp00, pp00, light_maps, chunk);
     }
+
+    light_maps->size = texturesCount;
+    
+    for(uint32_t idx = 0 ; idx < light_maps->size ; idx++){
+        
+        VECTOR* lm_cont = ((VECTOR*)light_maps->data) + idx;
+        TEXTURE* atl = makeLightMapsAtlas(lm_cont, newVertexesTri);
+
+        addVector(light_atlases, *atl);
+    }
+
+    *lightMapAtl = (TEXTURE*)light_atlases->data;
+    *lightMapAtlCount = light_maps->size;
 
     *vertexes = newVertexesTri->data;
     *verts_count = newVertexesTri->size;
@@ -152,7 +346,6 @@ void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t
 
     *indexes_count = newIndicesTri->size;
     *indexes = newIndicesTri->data;
-
 }
 
 unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, char * texName, unsigned char * image, uint32_t w, uint32_t h){
@@ -169,7 +362,7 @@ unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, char * texName, unsi
 
         char name[MAXTEXTURENAME+1];
 
-        for(size_t i = 0 ; i < header->nDir ; i++){
+        for(int32_t i = 0 ; i < header->nDir ; i++){
             WADDIRENTRY * dir = direntries + i;
 
             BSPMIPTEXWAD* tex = (BSPMIPTEXWAD*)(wadFile + dir->nFilePos);
@@ -186,7 +379,7 @@ unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, char * texName, unsi
                 unsigned char palette[256*3];
                 memcpy(palette, wadFile + dir->nFilePos + *(tex->nOffsets + 3) + ((tex->nWidth/8) * (tex->nHeight/8)) + 2, 256*3);
 
-                for(int i = 0 ; i < tex->nWidth * tex->nHeight ; i++){
+                for(uint32_t i = 0 ; i < tex->nWidth * tex->nHeight ; i++){
                     unsigned char* paletteIdx = palette + ((unsigned char)(indices[i])*3);
                     memcpy(image + i*4, paletteIdx, 3);
                                 
@@ -213,18 +406,13 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
     BSPHEADER* header = (BSPHEADER*)data;
 
     char wadWord[] = ".wad";
-    char * entities1 = (char*)data + (header->lump + LUMP_ENTITIES)->nOffset;
-
     char * entities = (char*)data + (header->lump + LUMP_ENTITIES)->nOffset;
     char* end = NULL;
-    uint32_t stop = 0;
 
-    VECTOR* wadNamesOffsets = initVector(16, sizeof(size_t));
     LINKEDLIST* wadsData = (LINKEDLIST*)malloc(sizeof(LINKEDLIST));
     LINKEDLIST* wadFirst = wadsData;
 
     while((end = strstr(entities, wadWord)) != NULL){
-                
         for(size_t ii = 0 ; ii < 100; ii++){
             if(*(end - ii) == '\\' || *(end - ii) == ' ' || *(end - ii) == ';' || *(end - ii) == '"'){
                 
@@ -269,7 +457,7 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
     TEXTURE* textureArray = (TEXTURE*)malloc(textureHeader->nMipTextures*sizeof(TEXTURE));
     *count = textureHeader->nMipTextures;
     
-    for(int i = 0; i < textureHeader->nMipTextures ; i++ ){
+    for(uint32_t i = 0; i < textureHeader->nMipTextures ; i++ ){
 
         BSPMIPTEX* bspTex = (BSPMIPTEX*)(data + lumpTextureOffset + *(texturesOffsets + i));
 
@@ -315,7 +503,7 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
             memcpy(texName, bspTex->szName, MAXTEXTURENAME);
             texName[MAXTEXTURENAME] = '\0';
 
-            for(int i = 0 ; i < bspTex->nWidth * bspTex->nHeight ; i++){
+            for(uint32_t i = 0 ; i < bspTex->nWidth * bspTex->nHeight ; i++){
                 char* paletteIdx = palette + ((unsigned char)(indices[i])*3);
                 memcpy(image + i*4, paletteIdx, 3);
                             

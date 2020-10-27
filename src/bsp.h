@@ -9,6 +9,7 @@
 #define BSP_H
 
 #include "debug.h"
+#include "texture.h"
 #include "container.h"
 
 // ========== VECTOR3D ===========
@@ -154,15 +155,6 @@ typedef struct _BSPTEXTUREINFO
     uint32_t nFlags;  // Texture flags, seem to always be 0
 } BSPTEXTUREINFO;
 
-// =========== TEXTURE ============
-
-typedef struct _TEXTURE
-{
-    uint32_t iWidth;
-    uint32_t iHeight;
-    unsigned char * data;
-} TEXTURE;
-
 // =========== VBO Chunk ============
 
 typedef struct _VBOCHUNK
@@ -173,15 +165,15 @@ typedef struct _VBOCHUNK
 
 // =========== FUNCS ============
 
-BSPMARKSURFACE* getMarksurfaces(unsigned char* data, uint32_t* count);
-BSPTEXTUREINFO* getTextureInfo(unsigned char* data, uint32_t* count);
-BSPSURFEDGE* getSurfaceEdges(unsigned char* data, uint32_t* count);
-BSPVERTEX* getVertices(unsigned char* data, uint32_t* count);
-BSPMODEL* getModels(unsigned char* data, uint32_t* count);
 BSPFACE* getFaces(unsigned char* data, uint32_t* count);
 BSPEDGE* getEdges(unsigned char* data, uint32_t* count);
+BSPMODEL* getModels(unsigned char* data, uint32_t* count);
+BSPVERTEX* getVertices(unsigned char* data, uint32_t* count);
+BSPSURFEDGE* getSurfaceEdges(unsigned char* data, uint32_t* count);
+BSPMARKSURFACE* getMarksurfaces(unsigned char* data, uint32_t* count);
+BSPTEXTUREINFO* getTextureInfo(unsigned char* data, uint32_t* count);
 
 TEXTURE* loadTextures(unsigned char* data, uint32_t* count);
-void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t* verts_count, VECTOR** models, uint32_t* textures_count, unsigned char** indexes, uint32_t* indexes_count, TEXTURE* texturesRaw, uint32_t texturesCount);
+void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t* verts_count, VECTOR** modelChunks, uint32_t* textures_count, unsigned char** indexes, uint32_t* indexes_count, TEXTURE* texturesRaw, uint32_t texturesCount, TEXTURE** lightMapAtl, uint32_t* lightMapAtlCount);
 
 #endif

@@ -23,6 +23,7 @@
 #include "camera.h"
 #include "container.h"
 
+
 bool check_shader_compile_status(GLuint obj) {
     GLint status;
     glGetShaderiv(obj, GL_COMPILE_STATUS, &status);
@@ -87,12 +88,15 @@ int main(int argv, char** argc) {
     // shader source code
     std::string vertex_source =
         "#version 330\n"
-        "uniform mat4 ViewProjection;\n"
+        "uniform mat4 ViewProjection;\n" // the projection matrix uniform
         "layout(location = 0) in vec4 vposition;\n"
         "layout(location = 1) in vec2 vertexUV;\n"
+        "layout(location = 2) in vec2 lightMapUV;\n"
         "out vec4 fcolor;\n"
         "out vec2 UV;\n"
+        "out vec2 lmUV;\n"
         "void main() {\n"
+        "   lmUV = lightMapUV;\n"
         "   UV = vertexUV;\n"
         "   gl_Position = ViewProjection*vposition;\n"
         "}\n";
@@ -101,13 +105,16 @@ int main(int argv, char** argc) {
         "#version 330\n"
         "in vec4 fcolor;\n"
         "in vec2 UV;\n"
+        "in vec2 lmUV;\n"
         "uniform sampler2D textureSampler;\n"
+        "uniform sampler2D lightmapSampler;\n"
         "layout(location = 0) out vec4 FragColor;\n"
         "void main() {\n"
         "vec4 texColor = texture(textureSampler, UV);"
         "if(texColor.a < 0.1)"
         "    discard;"
-        "FragColor = texColor;\n"
+        "vec4 lightMap = texture(lightmapSampler, lmUV) + 0.1;\n"
+        "FragColor = lightMap*texColor;\n"
         "}\n";
    
    
@@ -156,7 +163,10 @@ int main(int argv, char** argc) {
     // obtain location of projection uniform
     GLint ViewProjection_location = glGetUniformLocation(shader_program, "ViewProjection");
     GLint ViewPosition_location = glGetUniformLocation(shader_program, "ViewPosition");
-    
+
+    GLint DiffuseTex = glGetUniformLocation(shader_program, "textureSampler");
+    GLint LightMapTex = glGetUniformLocation(shader_program, "lightmapSampler");
+
     // vao and vbo handle
     GLuint vao, vbo, ibo;
  
@@ -203,7 +213,7 @@ int main(int argv, char** argc) {
 
     for(size_t i = 0 ; i < texturesCount ; i++){
 
-        TEXTURE* texture = (texturesRaw + i);
+        TEXTURE* texture = (texturesRaw + i );
 
         glBindTexture(GL_TEXTURE_2D, textureArray[i]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture->iWidth, texture->iHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture->data);
@@ -223,18 +233,47 @@ int main(int argv, char** argc) {
     unsigned char* ind;
     VECTOR* materials;
 
-    loadVertexesIndexes(bspFile, &ves, &verts_count, &materials, &textures_count, &ind, &ind_count, texturesRaw, texturesCount);
+    uint32_t lmAtlCount;
+    TEXTURE* lmAtlRaw;
+
+    loadVertexesIndexes(bspFile, &ves, &verts_count, &materials, &textures_count, &ind, &ind_count, texturesRaw, texturesCount, &lmAtlRaw, &lmAtlCount);
     
+    //============ LOAD LIGHT MAPS ==================
+
+    GLuint* lmAtlArray = (GLuint*)malloc(sizeof(GLuint)*lmAtlCount);
+    glGenTextures(lmAtlCount, lmAtlArray);
+
+    for(size_t i = 0 ; i < lmAtlCount ; i++){
+
+        TEXTURE* tex = (lmAtlRaw + i);
+
+        glBindTexture(GL_TEXTURE_2D, lmAtlArray[i]);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tex->iWidth, tex->iHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, tex->data);
+        
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    }
+
+    //============= FILL VAO & VBO ============
+
     // fill with data
     glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat)* verts_count, (GLfloat*)ves, GL_STATIC_DRAW);
                     
     // set up generic attrib pointers
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(GLfloat), (char*)0 + 0*sizeof(GLfloat));
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7*sizeof(GLfloat), (char*)0 + 0*sizeof(GLfloat));
  
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5*sizeof(GLfloat), (char*)0 + 3*sizeof(GLfloat));
-    
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 7*sizeof(GLfloat), (char*)0 + 3*sizeof(GLfloat));
+
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7*sizeof(GLfloat), (char*)0 + 5*sizeof(GLfloat));
+
     // generate and bind the index buffer object
     glGenBuffers(1, &ibo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
@@ -251,14 +290,18 @@ int main(int argv, char** argc) {
 
     float t = glfwGetTime();
 
-    // disable mouse cursor
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    
     // mouse position
     double mousex, mousey;
 
+    uint32_t idx = 0;
+
     while(!glfwWindowShouldClose(window)) {
+        
+        // listen events
         glfwPollEvents();
+
+        // disable mouse cursor
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             
         // calculate timestep
         float new_t = glfwGetTime();
@@ -280,6 +323,8 @@ int main(int argv, char** argc) {
         
         // use the shader program
         glUseProgram(shader_program);
+        glUniform1i(DiffuseTex, 0);
+        glUniform1i(LightMapTex,  1);
         glUniformMatrix4fv(ViewProjection_location, 1, GL_FALSE, glm::value_ptr(ViewProjection));
         glUniform3fv(ViewPosition_location, 1, glm::value_ptr(position));
         
@@ -287,11 +332,16 @@ int main(int argv, char** argc) {
         glBindVertexArray(vao);
 
         for(size_t i = 0 ; i < texturesCount ; i ++){
-            
-            glBindTexture(GL_TEXTURE_2D, (GLuint)i + 1);    
-            
+
+            glActiveTexture(GL_TEXTURE0 + 0);
+            glBindTexture(GL_TEXTURE_2D, *(textureArray + i));
+
+            glActiveTexture(GL_TEXTURE0 + 1);
+            glBindTexture(GL_TEXTURE_2D, *(lmAtlArray + i));
+
             for(size_t j = 0 ; j < materials[i].size; j+=2)
             {
+
                 uint32_t offset = *((uint32_t*)(materials[i].data) + j + 1);
                 uint32_t size = *(((uint32_t*)materials[i].data) + j);
 
@@ -307,7 +357,7 @@ int main(int argv, char** argc) {
         }
         
         // finally swap buffers
-        glfwSwapBuffers(window);        
+        glfwSwapBuffers(window);   
     }
     
     // delete the created objects
@@ -325,4 +375,3 @@ int main(int argv, char** argc) {
     glfwTerminate();
     return 0;
 }
-

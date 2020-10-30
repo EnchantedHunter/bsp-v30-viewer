@@ -465,9 +465,9 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
 
             //if bad texture size 
             TEXTURE* texture = (TEXTURE*)malloc(sizeof(TEXTURE));
-            texture->iWidth = 1024;
-            texture->iHeight = 1024;
-            texture->data = (unsigned char*)malloc(1024 * 1024 * 4);
+            texture->iWidth = 256;
+            texture->iHeight = 256;
+            texture->data = (unsigned char*)malloc(256 * 256 * 4);
             *(textureArray + i) = *texture;
 #ifdef DEBUG_LEVEL_2
             printf("Error: texture [%s] wrong size %d %d\n", bspTex->szName , bspTex->nWidth, bspTex->nHeight);
@@ -511,6 +511,10 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
 
                 if (strcmp (texName, "aaatrigger") == 0){
                     *(image + i*4+3) = 0x00;
+                }
+
+                if (texName[0] == '!'){
+                    *(image + i*4+3) = 0xAA;
                 }
 
                 if(((unsigned char)(indices[i])) == 255)

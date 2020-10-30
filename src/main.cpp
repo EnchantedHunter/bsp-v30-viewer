@@ -111,10 +111,10 @@ int main(int argv, char** argc) {
         "layout(location = 0) out vec4 FragColor;\n"
         "void main() {\n"
         "vec4 texColor = texture(textureSampler, UV);"
-        "if(texColor.a < 0.1)"
+        "if(texColor.a < 0.03)"
         "    discard;"
         "vec4 lightMap = texture(lightmapSampler, lmUV) + 0.1;\n"
-        "FragColor = lightMap*texColor;\n"
+        "FragColor = texColor*lightMap;\n"
         "}\n";
    
    
@@ -283,7 +283,11 @@ int main(int argv, char** argc) {
     
     // we are drawing 3d objects so we want depth testing
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);  
+    glEnable(GL_CULL_FACE);
+    glFrontFace(GL_CW);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     //camera 
     Camera* camera = new Camera();

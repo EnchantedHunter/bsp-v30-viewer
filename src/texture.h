@@ -1,3 +1,10 @@
+/* 
+ * BSP v30 viewer
+ * 
+ *
+ * Autor: Enchanted Hunter
+ */
+
 #ifndef TEXTURE_H
 #define TEXTURE_H
 
@@ -11,6 +18,8 @@ typedef struct _TEXTURE
     uint32_t iHeight;
     unsigned char * data;
 } TEXTURE;
+
+// ============ CHUNK =============
 
 typedef struct _CHUNK
 {

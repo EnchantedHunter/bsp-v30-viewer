@@ -16,6 +16,7 @@ typedef struct _TEXTURE
 {
     uint32_t iWidth;
     uint32_t iHeight;
+    unsigned char transparent_type;
     unsigned char * data;
 } TEXTURE;
 

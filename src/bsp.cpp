@@ -384,6 +384,10 @@ unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, char * texName, unsi
                     memcpy(image + i*4, paletteIdx, 3);
                                 
                     *(image + i*4+3) = 0xff;
+    
+                    if (strncmp (texName, "glass", 5) == 0){
+                        *(image + i*4+3) = 0x80;
+                    }
 
                     if(indices[i] == 255)
                     if( *((unsigned char*)(image + i*4 + 0)) == 0x0 &&
@@ -483,6 +487,9 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
 
         char* image = (char *)malloc(bspTex->nWidth * bspTex->nHeight * 4);
 
+        TEXTURE* texture = (TEXTURE*)malloc(sizeof(TEXTURE));
+        texture->transparent_type = 0x0;
+        
         if(bspTex->nOffsets[0] == 0 && 
             bspTex->nOffsets[1] == 0 && 
             bspTex->nOffsets[2] == 0 && 
@@ -492,8 +499,14 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
             memcpy(texName, bspTex->szName, MAXTEXTURENAME);
             texName[MAXTEXTURENAME] = '\0';
 
-            if (strcmp (texName, "aaatrigger") != 0)
+            if (strcmp (texName, "aaatrigger") != 0){
                 textureInWadFind(wadFirst, texName, (unsigned char*)image, bspTex->nWidth, bspTex->nHeight);
+
+                if (strncmp (texName, "glass", 5) == 0){
+                    texture->transparent_type = 0x01;
+                }
+
+            }
             else
                 memset(image, 0x00, bspTex->nWidth * bspTex->nHeight * 4);
             
@@ -513,8 +526,9 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
                     *(image + i*4+3) = 0x00;
                 }
 
-                if (texName[0] == '!'){
-                    *(image + i*4+3) = 0xAA;
+                if (texName[0] == '!' || strncmp (texName, "glass", 5) == 0){
+                    *(image + i*4+3) = 0x80;
+                    texture->transparent_type = 0x01;
                 }
 
                 if(((unsigned char)(indices[i])) == 255)
@@ -524,11 +538,11 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
                 {
                     *(image + i*4+2) = 0x00;
                     *(image + i*4+3) = 0x00;
+                    texture->transparent_type = 0x01;
                 }
             }
         }
         
-        TEXTURE* texture = (TEXTURE*)malloc(sizeof(TEXTURE));
         texture->iWidth = bspTex->nWidth;
         texture->iHeight = bspTex->nHeight;
         texture->data = (unsigned char*)image;

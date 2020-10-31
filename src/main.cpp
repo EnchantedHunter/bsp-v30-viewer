@@ -52,6 +52,30 @@ bool check_program_link_status(GLuint obj) {
     return true;
 }
 
+void render(uint32_t texturesCount, VECTOR* materials, GLuint* textureArray, GLuint* lmAtlArray, unsigned char* transparents, unsigned char isTransparent){
+    
+    for(size_t i = 0 ; i < texturesCount ; i ++){
+
+        if( *(transparents + i) != isTransparent)
+            continue;
+
+        glActiveTexture(GL_TEXTURE0 + 0);
+        glBindTexture(GL_TEXTURE_2D, *(textureArray + i));
+
+        glActiveTexture(GL_TEXTURE0 + 1);
+        glBindTexture(GL_TEXTURE_2D, *(lmAtlArray + i));
+
+        for(size_t j = 0 ; j < materials[i].size; j+=2)
+        {
+
+            uint32_t offset = *((uint32_t*)(materials[i].data) + j + 1);
+            uint32_t size = *(((uint32_t*)materials[i].data) + j);
+
+            glDrawElements(GL_TRIANGLES, size , GL_UNSIGNED_INT, (char*)0 + offset*sizeof(GLuint));
+        }
+    }
+}
+
 int main(int argv, char** argc) {
 
     int width = 640;
@@ -211,9 +235,14 @@ int main(int argv, char** argc) {
     GLuint* textureArray = (GLuint*)malloc(sizeof(GLuint)*texturesCount);
     glGenTextures(texturesCount, textureArray);
 
+    unsigned char * transparents = (unsigned char*)malloc(texturesCount * sizeof(unsigned char));
+
     for(size_t i = 0 ; i < texturesCount ; i++){
 
         TEXTURE* texture = (texturesRaw + i );
+
+        //check if half transparent
+        *(transparents + i) = texture->transparent_type;
 
         glBindTexture(GL_TEXTURE_2D, textureArray[i]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture->iWidth, texture->iHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture->data);
@@ -335,23 +364,8 @@ int main(int argv, char** argc) {
         // bind the vao
         glBindVertexArray(vao);
 
-        for(size_t i = 0 ; i < texturesCount ; i ++){
-
-            glActiveTexture(GL_TEXTURE0 + 0);
-            glBindTexture(GL_TEXTURE_2D, *(textureArray + i));
-
-            glActiveTexture(GL_TEXTURE0 + 1);
-            glBindTexture(GL_TEXTURE_2D, *(lmAtlArray + i));
-
-            for(size_t j = 0 ; j < materials[i].size; j+=2)
-            {
-
-                uint32_t offset = *((uint32_t*)(materials[i].data) + j + 1);
-                uint32_t size = *(((uint32_t*)materials[i].data) + j);
-
-                glDrawElements(GL_TRIANGLES, size , GL_UNSIGNED_INT, (char*)0 + offset*sizeof(GLuint));
-            }
-        }
+        render(texturesCount, materials, textureArray, lmAtlArray, transparents, 0x00);
+        render(texturesCount, materials, textureArray, lmAtlArray, transparents, 0x01);
 
         // check for errors
         GLenum error = glGetError();

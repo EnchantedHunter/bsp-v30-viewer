@@ -8,7 +8,7 @@
 #ifndef TEXTURE_H
 #define TEXTURE_H
 
-#include <iostream>
+#include <stdlib.h>
 
 // =========== TEXTURE ============
 

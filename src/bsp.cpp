@@ -55,6 +55,9 @@ TEXTURE* makeLightMapsAtlas(VECTOR* lms, VECTOR* vertexes){
             m_height = lm->iHeight;
     }
 
+    m_width += 2;
+    m_height += 2;
+
     uint32_t lx = 0;
     uint32_t ly = 0;
 
@@ -72,7 +75,7 @@ TEXTURE* makeLightMapsAtlas(VECTOR* lms, VECTOR* vertexes){
     TEXTURE* atl = (TEXTURE*)malloc( sizeof(TEXTURE));
     
     unsigned char* atlas = (unsigned char*)malloc( lx * m_width * ly * m_height * 3 * sizeof(unsigned char));
-    memset(atlas, 0x0f, lx * m_width * ly * m_height * 3 * sizeof(unsigned char));
+    memset(atlas, 0x00, lx * m_width * ly * m_height * 3 * sizeof(unsigned char));
 
     atl->data = atlas;
     atl->iWidth = lx * m_width;
@@ -99,8 +102,8 @@ TEXTURE* makeLightMapsAtlas(VECTOR* lms, VECTOR* vertexes){
             float u = *( ((float*)vertexes->data) + *(((uint32_t*)clm->u) + ii) );
             float v = *( ((float*)vertexes->data) + *(((uint32_t*)clm->v) + ii) );
 
-            float xu = ((int)(u * ((float)lm->iWidth) + ((float)(px)) * m_width  )) / ((float)atl->iWidth);
-            float xv = ((int)(v * ((float)lm->iHeight) + ((float)(py - 1)) * m_height )) / ((float)atl->iHeight) ;
+            float xu = ((int)(u * ((float)lm->iWidth) + ((float)(px)) * m_width + 1 )) / ((float)atl->iWidth);
+            float xv = ((int)(v * ((float)lm->iHeight) + ((float)(py - 1)) * m_height + 1 )) / ((float)atl->iHeight) ;
 
             *( ((float*)vertexes->data) + *(((uint32_t*)clm->u) + ii) ) = xu;
             *( ((float*)vertexes->data) + *(((uint32_t*)clm->v) + ii) ) = xv;
@@ -108,11 +111,21 @@ TEXTURE* makeLightMapsAtlas(VECTOR* lms, VECTOR* vertexes){
 
         for(uint32_t x = 0; x < lm->iHeight ; x++){
 
-            uint32_t sft = (py - 1 )* lx * m_width * 3 * m_height + (px) * m_width * 3 + lx * m_width * 3 * x;
+            uint32_t sft = ( py - 1 )* lx * m_width * 3 * m_height + (px) * m_width * 3 + lx * m_width * 3 * x + lx * m_width * 3 * 1 + 3;
             uint32_t lm_sft = (x) * lm->iWidth * 3;
 
             memcpy(atlas + sft, lm->data + lm_sft, lm->iWidth * 3);
+
+            //fill nearest pixels in atlas for gl_linear
+            memcpy(atlas + sft + lm->iWidth * 3 , lm->data + lm_sft + lm->iWidth * 3, 3);
+            memcpy(atlas + sft - 3, lm->data + lm_sft , 3);
         }
+        
+        //fill nearest pixels in atlas for gl_linear
+        uint32_t sft = ( py - 1 )* lx * m_width * 3 * m_height + (px) * m_width * 3 + 3 ;
+        memcpy(atlas + sft, lm->data , lm->iWidth * 3);
+        sft = ( py - 1 )* lx * m_width * 3 * m_height + (px) * m_width * 3 + lx * m_width * 3 * (lm->iHeight - 1) + lx * m_width * 3 * 1 + 3;
+        memcpy(atlas + sft, lm->data + (lm->iHeight - 1) * lm->iWidth * 3, lm->iWidth * 3);
     }
 
     return atl;
@@ -348,7 +361,41 @@ void loadVertexesIndexes(unsigned char* data, unsigned char** vertexes, uint32_t
     *indexes = newIndicesTri->data;
 }
 
-unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, char * texName, unsigned char * image, uint32_t w, uint32_t h){
+void makeTexture(TEXTURE* texture, void * dataPtr, void * palettePtr)
+{
+    unsigned char indices[texture->iWidth * texture->iHeight];
+    memcpy(indices, dataPtr, texture->iWidth * texture->iHeight);
+
+    unsigned char palette[256*3];
+    memcpy(palette, palettePtr, 256*3);
+
+    for(uint32_t i = 0 ; i < texture->iWidth * texture->iHeight ; i++){
+        unsigned char* paletteIdx = palette + ((unsigned char)(indices[i])*3);
+        memcpy(texture->data + i*4, paletteIdx, 3);
+                    
+        *(texture->data + i*4+3) = 0xff;
+
+        if ( texture->name[0] == '!' || strncmp (texture->name, "glass", 5) == 0){
+            *(texture->data + i*4+3) = 0x80;
+            texture->transparent_type = 0x01;
+        }
+
+        if ( strcmp (texture->name, "aaatrigger") == 0){
+            *(texture->data + i*4+3) = 0x00;
+        }
+
+        if(indices[i] == 255)
+        if( *((unsigned char*)(texture->data + i*4 + 0)) == 0x0 &&
+            *((unsigned char*)(texture->data + i*4 + 1)) == 0x0  &&
+            *((unsigned char*)(texture->data + i*4 + 2)) == 0xff)
+        {
+            *(texture->data + i*4+2) = 0x00;
+            *(texture->data + i*4+3) = 0x00;
+        }
+    }
+}
+
+unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, TEXTURE* texture){
 
     LINKEDLIST* wadsData = wadsDataFirst;
     
@@ -369,35 +416,13 @@ unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, char * texName, unsi
             memcpy(name, tex->szName, MAXTEXTURENAME);
             name[MAXTEXTURENAME]='\0';
 
-            if (strcmp (texName, name) == 0 && tex->nWidth == w && tex->nHeight == h){
+            if (strcmp (texture->name, name) == 0 && tex->nWidth == texture->iWidth && tex->nHeight == texture->iHeight){
 #ifdef DEBUG_LEVEL_2
                 printf("found texture in wad file : %s\n", name);
 #endif
-                unsigned char indices[tex->nWidth * tex->nHeight];
-                memcpy(indices, wadFile + dir->nFilePos + *(tex->nOffsets + 0), tex->nWidth * tex->nHeight);
-
-                unsigned char palette[256*3];
-                memcpy(palette, wadFile + dir->nFilePos + *(tex->nOffsets + 3) + ((tex->nWidth/8) * (tex->nHeight/8)) + 2, 256*3);
-
-                for(uint32_t i = 0 ; i < tex->nWidth * tex->nHeight ; i++){
-                    unsigned char* paletteIdx = palette + ((unsigned char)(indices[i])*3);
-                    memcpy(image + i*4, paletteIdx, 3);
-                                
-                    *(image + i*4+3) = 0xff;
-    
-                    if (strncmp (texName, "glass", 5) == 0){
-                        *(image + i*4+3) = 0x80;
-                    }
-
-                    if(indices[i] == 255)
-                    if( *((unsigned char*)(image + i*4 + 0)) == 0x0 &&
-                        *((unsigned char*)(image + i*4 + 1)) == 0x0  &&
-                        *((unsigned char*)(image + i*4 + 2)) == 0xff)
-                    {
-                        *(image + i*4+2) = 0x00;
-                        *(image + i*4+3) = 0x00;
-                    }
-                }
+                makeTexture(texture, 
+                    (unsigned char*)wadFile + dir->nFilePos + *(tex->nOffsets + 0), 
+                    (unsigned char*)wadFile + dir->nFilePos + *(tex->nOffsets + 3) + ((tex->nWidth/8) * (tex->nHeight/8)) + 2);
             }
         }
     }
@@ -469,9 +494,9 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
 
             //if bad texture size 
             TEXTURE* texture = (TEXTURE*)malloc(sizeof(TEXTURE));
-            texture->iWidth = 256;
-            texture->iHeight = 256;
-            texture->data = (unsigned char*)malloc(256 * 256 * 4);
+            texture->iWidth = 1;
+            texture->iHeight = 1;
+            texture->data = (unsigned char*)malloc(1 * 1 * 4);
             *(textureArray + i) = *texture;
 #ifdef DEBUG_LEVEL_2
             printf("Error: texture [%s] wrong size %d %d\n", bspTex->szName , bspTex->nWidth, bspTex->nHeight);
@@ -479,13 +504,7 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
             continue;
         }
         
-        char* indices = (char *)malloc(bspTex->nWidth * bspTex->nHeight);
-        memcpy(indices, data + lumpTextureOffset + *(texturesOffsets + i) + *(bspTex->nOffsets + 0), bspTex->nWidth * bspTex->nHeight);
-
-        char palette[256*3];
-        memcpy(palette, data + lumpTextureOffset + *(texturesOffsets + i) + *(bspTex->nOffsets + 3) + ((bspTex->nWidth/8) * (bspTex->nHeight/8)) + 2, 256*3);
-
-        char* image = (char *)malloc(bspTex->nWidth * bspTex->nHeight * 4);
+        unsigned char* image = (unsigned char *)malloc(bspTex->nWidth * bspTex->nHeight * 4);
 
         TEXTURE* texture = (TEXTURE*)malloc(sizeof(TEXTURE));
         texture->transparent_type = 0x0;
@@ -495,58 +514,26 @@ TEXTURE* loadTextures(unsigned char* data, uint32_t* count){
             bspTex->nOffsets[2] == 0 && 
             bspTex->nOffsets[3] == 0){
 
-            char texName[MAXTEXTURENAME + 1];
-            memcpy(texName, bspTex->szName, MAXTEXTURENAME);
-            texName[MAXTEXTURENAME] = '\0';
+            texture->name = bspTex->szName;
+            texture->data = image;
+            texture->iWidth = bspTex->nWidth;
+            texture->iHeight = bspTex->nHeight;
 
-            if (strcmp (texName, "aaatrigger") != 0){
-                textureInWadFind(wadFirst, texName, (unsigned char*)image, bspTex->nWidth, bspTex->nHeight);
+            textureInWadFind(wadFirst, texture);
 
-                if (strncmp (texName, "glass", 5) == 0){
-                    texture->transparent_type = 0x01;
-                }
-
-            }
-            else
-                memset(image, 0x00, bspTex->nWidth * bspTex->nHeight * 4);
-            
         }else{
             
-            char texName[MAXTEXTURENAME + 1];
-            memcpy(texName, bspTex->szName, MAXTEXTURENAME);
-            texName[MAXTEXTURENAME] = '\0';
+            texture->name = bspTex->szName;
+            texture->data = image;
+            texture->iWidth = bspTex->nWidth;
+            texture->iHeight = bspTex->nHeight;
 
-            for(uint32_t i = 0 ; i < bspTex->nWidth * bspTex->nHeight ; i++){
-                char* paletteIdx = palette + ((unsigned char)(indices[i])*3);
-                memcpy(image + i*4, paletteIdx, 3);
-                            
-                *(image + i*4+3) = 0xff;
+            makeTexture(texture,
+                data + lumpTextureOffset + *(texturesOffsets + i) + *(bspTex->nOffsets + 0),
+                data + lumpTextureOffset + *(texturesOffsets + i) + *(bspTex->nOffsets + 3) + ((bspTex->nWidth/8) * (bspTex->nHeight/8)) + 2);
 
-                if (strcmp (texName, "aaatrigger") == 0){
-                    *(image + i*4+3) = 0x00;
-                }
-
-                if (texName[0] == '!' || strncmp (texName, "glass", 5) == 0){
-                    *(image + i*4+3) = 0x80;
-                    texture->transparent_type = 0x01;
-                }
-
-                if(((unsigned char)(indices[i])) == 255)
-                if( *((unsigned char*)(image + i*4 + 0)) == 0x0 &&
-                    *((unsigned char*)(image + i*4 + 1)) == 0x0  &&
-                    *((unsigned char*)(image + i*4 + 2)) == 0xff)
-                {
-                    *(image + i*4+2) = 0x00;
-                    *(image + i*4+3) = 0x00;
-                    texture->transparent_type = 0x01;
-                }
-            }
         }
-        
-        texture->iWidth = bspTex->nWidth;
-        texture->iHeight = bspTex->nHeight;
-        texture->data = (unsigned char*)image;
-
+  
         *(textureArray + i) = *texture;
     }
 

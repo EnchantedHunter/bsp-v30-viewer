@@ -18,6 +18,7 @@ typedef struct _TEXTURE
     uint32_t iHeight;
     unsigned char transparent_type;
     unsigned char * data;
+    char * name;
 } TEXTURE;
 
 // ============ CHUNK =============

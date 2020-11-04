@@ -395,7 +395,7 @@ void makeTexture(TEXTURE* texture, void * dataPtr, void * palettePtr)
     }
 }
 
-unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, TEXTURE* texture){
+void textureInWadFind(LINKEDLIST* wadsDataFirst, TEXTURE* texture){
 
     LINKEDLIST* wadsData = wadsDataFirst;
     
@@ -407,27 +407,24 @@ unsigned char * textureInWadFind(LINKEDLIST* wadsDataFirst, TEXTURE* texture){
         WADHEADER* header = (WADHEADER*)wadFile;
         WADDIRENTRY* direntries = (WADDIRENTRY*)(wadFile + header->nDirOffset);
 
-        char name[MAXTEXTURENAME+1];
-
         for(int32_t i = 0 ; i < header->nDir ; i++){
+
             WADDIRENTRY * dir = direntries + i;
-
             BSPMIPTEXWAD* tex = (BSPMIPTEXWAD*)(wadFile + dir->nFilePos);
-            memcpy(name, tex->szName, MAXTEXTURENAME);
-            name[MAXTEXTURENAME]='\0';
 
-            if (strcmp (texture->name, name) == 0 && tex->nWidth == texture->iWidth && tex->nHeight == texture->iHeight){
+            if (strcmp (texture->name, tex->szName) == 0 && tex->nWidth == texture->iWidth && tex->nHeight == texture->iHeight){
 #ifdef DEBUG_LEVEL_2
-                printf("found texture in wad file : %s\n", name);
+                printf("found texture in wad file : %s\n", tex->szName);
 #endif
                 makeTexture(texture, 
                     (unsigned char*)wadFile + dir->nFilePos + *(tex->nOffsets + 0), 
                     (unsigned char*)wadFile + dir->nFilePos + *(tex->nOffsets + 3) + ((tex->nWidth/8) * (tex->nHeight/8)) + 2);
+                return;
             }
         }
     }
     
-    return NULL;
+    return;
 }
 
 TEXTURE* loadTextures(unsigned char* data, uint32_t* count){

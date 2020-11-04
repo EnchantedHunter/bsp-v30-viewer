@@ -326,8 +326,6 @@ int main(int argv, char** argc) {
     // mouse position
     double mousex, mousey;
 
-    uint32_t idx = 0;
-
     while(!glfwWindowShouldClose(window)) {
         
         // listen events

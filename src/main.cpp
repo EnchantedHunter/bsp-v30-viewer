@@ -134,9 +134,9 @@ int main(int argv, char** argc) {
         "uniform sampler2D lightmapSampler;\n"
         "layout(location = 0) out vec4 FragColor;\n"
         "void main() {\n"
-        "vec4 texColor = texture(textureSampler, UV);"
-        "if(texColor.a < 0.03)"
-        "    discard;"
+        "vec4 texColor = texture(textureSampler, UV);\n"
+        "if(texColor.a < 0.03)\n"
+        "    discard;\n"
         "vec4 lightMap = texture(lightmapSampler, lmUV) + 0.1;\n"
         "FragColor = texColor*lightMap;\n"
         "}\n";
@@ -285,7 +285,7 @@ int main(int argv, char** argc) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glGenerateMipmap(GL_TEXTURE_2D);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     }
 
     //============= FILL VAO & VBO ============

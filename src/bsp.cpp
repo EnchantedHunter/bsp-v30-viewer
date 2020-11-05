@@ -117,15 +117,20 @@ TEXTURE* makeLightMapsAtlas(VECTOR* lms, VECTOR* vertexes){
             memcpy(atlas + sft, lm->data + lm_sft, lm->iWidth * 3);
 
             //fill nearest pixels in atlas for gl_linear
-            memcpy(atlas + sft + lm->iWidth * 3 , lm->data + lm_sft + lm->iWidth * 3, 3);
+            memcpy(atlas + sft + lm->iWidth * 3 , lm->data + lm_sft + lm->iWidth * 3 - 3, 3);
             memcpy(atlas + sft - 3, lm->data + lm_sft , 3);
         }
         
         //fill nearest pixels in atlas for gl_linear
         uint32_t sft = ( py - 1 )* lx * m_width * 3 * m_height + (px) * m_width * 3 + 3 ;
         memcpy(atlas + sft, lm->data , lm->iWidth * 3);
-        sft = ( py - 1 )* lx * m_width * 3 * m_height + (px) * m_width * 3 + lx * m_width * 3 * (lm->iHeight - 1) + lx * m_width * 3 * 1 + 3;
+        memcpy(atlas + sft - 3, atlas + sft , 3);
+        memcpy(atlas + sft + lm->iWidth * 3, atlas + sft + lm->iWidth * 3 - 3, 3);
+
+        sft = ( py - 1 )* lx * m_width * 3 * m_height + (px) * m_width * 3 + lx * m_width * 3 * (lm->iHeight) + lx * m_width * 3 * 1 + 3;
         memcpy(atlas + sft, lm->data + (lm->iHeight - 1) * lm->iWidth * 3, lm->iWidth * 3);
+        memcpy(atlas + sft - 3, atlas + sft , 3);
+        memcpy(atlas + sft + lm->iWidth * 3, atlas + sft + lm->iWidth * 3 - 3, 3);
     }
 
     return atl;
